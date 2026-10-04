@@ -1,16 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Loader2, AlertCircle, CheckCircle2, MailCheck, RotateCw } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, MailCheck, RotateCw, Mail } from 'lucide-react'
 
 interface LocationState {
   email?: string
-  verificationCode?: string
 }
 
 export default function VerifyEmail() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { email: initialEmail, verificationCode: devCode } = (location.state ?? {}) as LocationState
+  const { email: initialEmail } = (location.state ?? {}) as LocationState
 
   const [email, setEmail] = useState(initialEmail ?? '')
   const [code, setCode] = useState(['', '', '', '', '', ''])
@@ -18,12 +17,11 @@ export default function VerifyEmail() {
   const [resending, setResending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [showDevCode, setShowDevCode] = useState(!!devCode)
+  const [resendSuccess, setResendSuccess] = useState(false)
   const inputsRef = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => {
     if (!initialEmail) {
-      // No email passed — redirect to login
       navigate('/login', { replace: true })
     }
   }, [initialEmail, navigate])
@@ -84,7 +82,6 @@ export default function VerifyEmail() {
       }
 
       setSuccess(true)
-      // Redirect to login after 2s
       setTimeout(() => navigate('/login', { replace: true }), 2500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de vérification')
@@ -95,6 +92,7 @@ export default function VerifyEmail() {
 
   async function handleResend() {
     setError(null)
+    setResendSuccess(false)
     setResending(true)
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -115,11 +113,7 @@ export default function VerifyEmail() {
         throw new Error(data.error || 'Erreur')
       }
 
-      if (data.verificationCode) {
-        setShowDevCode(true)
-        // Update dev code if returned
-        // The code is in data.verificationCode
-      }
+      setResendSuccess(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur')
     } finally {
@@ -153,23 +147,32 @@ export default function VerifyEmail() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Vérifiez votre email</h1>
           <p className="text-sm text-slate-500">
-            Un code de vérification à 6 chiffres a été envoyé à<br />
+            Un email de vérification a été envoyé à<br />
             <span className="font-semibold text-slate-700">{email}</span>
           </p>
         </div>
 
-        {showDevCode && devCode && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
-            <p className="font-medium">Mode développement</p>
-            <p>Votre code de vérification : <span className="font-bold text-lg tracking-wider">{devCode}</span></p>
-            <p className="text-xs mt-1">En production, ce code serait envoyé uniquement par email.</p>
+        {/* Info box — link-based verification */}
+        <div className="mb-4 bg-primary-50 border border-primary-200 rounded-lg px-4 py-3 text-sm text-primary-800">
+          <div className="flex items-start gap-2">
+            <Mail size={16} className="flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Vérification par lien</p>
+              <p className="mt-1">Ouvrez votre boîte email et cliquez sur le lien de confirmation pour vérifier votre compte. Vous pouvez aussi saisir le code à 6 chiffres ci-dessous si votre email en contient un.</p>
+            </div>
+          </div>
+        </div>
+
+        {resendSuccess && (
+          <div className="mb-4 bg-success-50 border border-success-200 rounded-lg px-4 py-3 text-sm text-success-700">
+            Un nouvel email de vérification a été envoyé. Vérifiez votre boîte de réception.
           </div>
         )}
 
         <form onSubmit={handleVerify} className="card p-6 space-y-4">
           <div>
-            <label className="label text-center">Code de vérification</label>
-            <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+            <label className="label text-center">Code de vérification (6 chiffres)</label>
+            <div className="flex gap-1 sm:gap-2 justify-center" onPaste={handlePaste}>
               {code.map((digit, i) => (
                 <input
                   key={i}
@@ -180,7 +183,7 @@ export default function VerifyEmail() {
                   value={digit}
                   onChange={(e) => handleCodeChange(i, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(i, e)}
-                  className="w-12 h-14 text-center text-xl font-bold rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-10 h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-bold rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   autoFocus={i === 0}
                 />
               ))}
@@ -213,7 +216,7 @@ export default function VerifyEmail() {
             className="text-sm text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1"
           >
             {resending ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
-            Renvoyer le code
+            Renvoyer l'email de vérification
           </button>
           <br />
           <Link to="/login" className="text-sm text-slate-400 hover:text-slate-600">

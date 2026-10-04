@@ -49,7 +49,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Find the latest unused, non-expired verification code
+    // Find the latest unused, non-expired, non-invalidated verification code
     const now = new Date().toISOString();
     const { data: verification, error: verError } = await supabase
       .from("email_verifications")
@@ -57,19 +57,73 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", profile.id)
       .eq("code", code)
       .eq("used", false)
+      .eq("invalidated", false)
       .gt("expires_at", now)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (verError || !verification) {
+      // Check if there's an active code — increment its attempts
+      const { data: activeCode } = await supabase
+        .from("email_verifications")
+        .select("*")
+        .eq("user_id", profile.id)
+        .eq("used", false)
+        .eq("invalidated", false)
+        .gt("expires_at", now)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeCode) {
+        const newAttempts = (activeCode.attempts || 0) + 1;
+        const maxAttempts = activeCode.max_attempts || 5;
+
+        if (newAttempts >= maxAttempts) {
+          // Invalidate this code — too many attempts
+          await supabase
+            .from("email_verifications")
+            .update({ invalidated: true })
+            .eq("id", activeCode.id);
+
+          return new Response(
+            JSON.stringify({ error: "Trop de tentatives incorrectes. Demandez un nouveau code." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        await supabase
+          .from("email_verifications")
+          .update({ attempts: newAttempts })
+          .eq("id", activeCode.id);
+
+        const remaining = maxAttempts - newAttempts;
+        return new Response(
+          JSON.stringify({ error: `Code incorrect. ${remaining} tentative(s) restante(s).` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
-        JSON.stringify({ error: "Code de vérification invalide ou expiré" }),
+        JSON.stringify({ error: "Code de vérification invalide, expiré ou déjà utilisé. Demandez un nouveau code." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Mark code as used
+    // Check attempt limit (even on correct code, verify attempts haven't been exhausted)
+    if (verification.attempts >= (verification.max_attempts || 5)) {
+      await supabase
+        .from("email_verifications")
+        .update({ invalidated: true })
+        .eq("id", verification.id);
+      return new Response(
+        JSON.stringify({ error: "Trop de tentatives incorrectes. Demandez un nouveau code." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Mark code as used (single use)
     await supabase
       .from("email_verifications")
       .update({ used: true })

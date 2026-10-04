@@ -11,6 +11,9 @@ function generateVerificationCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+const MAX_RESENDS = 3;
+const RESEND_WINDOW_HOURS = 24;
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -52,7 +55,32 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Generate new code
+    // --- Rate limit: count resends in the last 24h ---
+    const windowStart = new Date(Date.now() - RESEND_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
+    const { count } = await supabase
+      .from("email_verifications")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .gte("created_at", windowStart);
+
+    if (count !== null && count >= MAX_RESENDS) {
+      return new Response(
+        JSON.stringify({ error: `Trop de demandes de renvoi (${MAX_RESENDS} maximum par 24h). Réessayez plus tard.` }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- Invalidate all previous active codes ---
+    const now = new Date().toISOString();
+    await supabase
+      .from("email_verifications")
+      .update({ invalidated: true })
+      .eq("user_id", profile.id)
+      .eq("used", false)
+      .eq("invalidated", false)
+      .gt("expires_at", now);
+
+    // --- Generate new code ---
     const verificationCode = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -61,9 +89,12 @@ Deno.serve(async (req: Request) => {
       code: verificationCode,
       expires_at: expiresAt.toISOString(),
       used: false,
+      invalidated: false,
+      attempts: 0,
+      max_attempts: 5,
     });
 
-    // Resend Supabase confirmation email
+    // --- Resend Supabase confirmation email (link-based) ---
     try {
       await fetch(`${supabaseUrl}/auth/v1/resend`, {
         method: "POST",
@@ -78,11 +109,11 @@ Deno.serve(async (req: Request) => {
       console.error("Email resend error:", e);
     }
 
+    // --- NEVER return the verification code ---
     return new Response(
       JSON.stringify({
         success: true,
-        verificationCode,
-        message: "Un nouveau code de vérification a été envoyé",
+        message: "Un nouvel email de vérification a été envoyé",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

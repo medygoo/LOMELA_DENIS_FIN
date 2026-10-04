@@ -78,7 +78,7 @@ export default function Login() {
                 <div>
                   <p className="text-sm font-medium text-amber-800">Email non vérifié</p>
                   <p className="text-xs text-amber-700 mt-1">
-                    Vous devez vérifier votre email avant de pouvoir vous connecter.
+                    Vérifiez votre boîte email : ouvrez l'email de confirmation et cliquez sur le lien, ou saisissez le code à 6 chiffres.
                   </p>
                   <button
                     onClick={() => navigate('/verify-email', { state: { email } })}

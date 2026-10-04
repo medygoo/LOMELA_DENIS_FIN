@@ -45,7 +45,6 @@ Deno.serve(async (req: Request) => {
       passwordConfirm,
     } = await req.json();
 
-    // --- Validation ---
     if (!schoolName || !email || !password || !yearName || !firstName || !lastName) {
       return new Response(
         JSON.stringify({ error: "Champs obligatoires manquants" }),
@@ -87,7 +86,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // --- Duplicate school detection: name + city/commune + phone or email ---
+    // --- Duplicate school detection ---
     const nameMatch = schoolName.trim().toLowerCase();
     let duplicateQuery = supabase
       .from("schools")
@@ -101,7 +100,6 @@ Deno.serve(async (req: Request) => {
     const { data: similarSchools } = await duplicateQuery.limit(5);
 
     if (similarSchools && similarSchools.length > 0) {
-      // Check if phone or email also matches
       const probableDuplicate = similarSchools.find((s: Record<string, string | null>) => {
         const phoneMatch = phone && s.phone && s.phone.replace(/\s/g, "") === phone.replace(/\s/g, "");
         const emailMatch = schoolEmail && s.email && s.email.toLowerCase() === schoolEmail.toLowerCase();
@@ -172,7 +170,6 @@ Deno.serve(async (req: Request) => {
       });
 
     if (yearError) {
-      // Rollback: delete school
       await supabase.from("schools").delete().eq("id", school.id);
       return new Response(
         JSON.stringify({ error: "Erreur lors de la création de l'année scolaire: " + yearError.message }),
@@ -185,11 +182,10 @@ Deno.serve(async (req: Request) => {
     if (userFunction === "Directeur") {
       roles.push("direction");
     }
+    const primaryRole = roles[0];
 
-    const primaryRole = roles[0]; // admin_principal
-
-    // --- Create admin user via Supabase Auth admin ---
-    // email_confirm: false — user must verify email
+    // --- Create admin user via Supabase Auth ---
+    // email_confirm: false — user must verify email via link or code
     const { data: authUser, error: authError } = await supabase.auth.admin
       .createUser({
         email,
@@ -204,7 +200,6 @@ Deno.serve(async (req: Request) => {
       });
 
     if (authError || !authUser.user) {
-      // Rollback: delete school year and school
       await supabase.from("school_years").delete().eq("school_id", school.id);
       await supabase.from("schools").delete().eq("id", school.id);
       return new Response(
@@ -235,7 +230,7 @@ Deno.serve(async (req: Request) => {
       console.error("profile error:", profileError);
     }
 
-    // --- Create user_roles entries (multiple roles) ---
+    // --- Create user_roles entries ---
     for (const role of roles) {
       await supabase.from("user_roles").upsert({
         user_id: userId,
@@ -245,24 +240,23 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // --- Generate email verification code ---
+    // --- Generate and store email verification code ---
     const verificationCode = generateVerificationCode();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await supabase.from("email_verifications").insert({
       user_id: userId,
       code: verificationCode,
       expires_at: expiresAt.toISOString(),
       used: false,
+      invalidated: false,
+      attempts: 0,
+      max_attempts: 5,
     });
 
-    // --- Send verification email via Supabase Auth ---
-    // We use resendSignUpEmail which sends the Supabase confirmation email
-    // The verification code is also stored in email_verifications for our custom flow
-    // Note: Supabase Auth email_confirm was set to false, so the user needs to verify
-    // We send both: Supabase's built-in email + our code-based flow
+    // --- Send Supabase confirmation email (link-based) ---
+    // This sends a real email to the user's inbox with a verification link
     try {
-      // Send Supabase confirmation email
       const res = await fetch(`${supabaseUrl}/auth/v1/resend`, {
         method: "POST",
         headers: {
@@ -282,13 +276,13 @@ Deno.serve(async (req: Request) => {
       console.error("Email send error:", e);
     }
 
+    // --- NEVER return the verification code in the response ---
     return new Response(
       JSON.stringify({
         success: true,
         schoolId: school.id,
         schoolCode: school.code,
         userId,
-        verificationCode, // Return code for dev/testing — in production this would only be in the email
         needsVerification: true,
         email,
       }),

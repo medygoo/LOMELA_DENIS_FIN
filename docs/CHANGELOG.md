@@ -1,5 +1,24 @@
 # SchoolSafe — Changelog
 
+## 2026-10-04 — Partie 1 : Correction vérification e-mail
+
+### Migration de base de données (007_email_verification_security.sql)
+- Ajout colonnes `email_verifications` : `attempts` (int, default 0), `max_attempts` (int, default 5), `invalidated` (boolean, default false).
+
+### Edge functions — sécurisation
+- **setup-school** : le code de vérification n'est plus retourné dans la réponse API. Le code est stocké en base et un email de confirmation Supabase est envoyé.
+- **verify-email** : ajout du comptage des tentatives. Après chaque code incorrect, `attempts` est incrémenté. À 5 tentatives, le code est invalidé. Messages d'erreur avec décompte des tentatives restantes. Code trouvé uniquement si `used=false`, `invalidated=false`, non expiré.
+- **resend-verification** : le code n'est plus retourné dans la réponse. Invalidation de tous les codes précédents actifs (`invalidated=true`). Limite de 3 renvois par 24h. Nouveau code généré avec `attempts=0`.
+
+### Frontend
+- **Register** : `verificationCode` n'est plus passé à la page de vérification. Les dates de début et fin d'année scolaire sont maintenant obligatoires (la base de données les requiert).
+- **VerifyEmail** : suppression de l'affichage du code en mode développement. Ajout d'une info box expliquant la vérification par lien. Les inputs OTP sont responsive (plus petits sur mobile). Message de confirmation après renvoi.
+- **Login** : le message de non-vérification mentionne le lien ET le code.
+- **useAuth** : détection de l'erreur `email_not_confirmed` de Supabase Auth → redirection vers verify-email. Synchronisation de `profiles.email_verified` si Supabase Auth a confirmé l'email via le lien.
+
+### Tests
+- 10 tests de sécurité exécutés et tous réussis (voir CURRENT_STATE.md).
+
 ## 2026-10-04 — Partie 1 : Entrée dans SchoolSafe
 
 ### Migration de base de données (006_school_setup_email_verification.sql)

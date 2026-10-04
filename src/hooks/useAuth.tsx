@@ -83,15 +83,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signIn(email: string, password: string) {
     const { error, data } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return { error: error.message }
+    if (error) {
+      // Supabase Auth blocks login when email is not confirmed
+      if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
+        return { error: null, needsVerification: true }
+      }
+      return { error: error.message }
+    }
 
     // Fetch profile to check email_verified and is_active
     const p = await fetchProfileAndSchool(data.user.id)
     if (!p) return { error: 'Profil introuvable. Contactez l\'administrateur de votre école.' }
 
+    // If Supabase Auth confirmed the email (via link), sync our profile
+    if (!p.email_verified && data.user.email_confirmed_at) {
+      await supabase.from('profiles').update({ email_verified: true }).eq('id', data.user.id)
+      p.email_verified = true
+    }
+
     if (!p.email_verified) {
       setNeedsEmailVerification(true)
-      // Sign out — user must verify first
       await supabase.auth.signOut()
       setSession(null)
       setProfile(null)

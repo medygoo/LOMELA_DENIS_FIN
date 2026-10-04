@@ -44,6 +44,8 @@ export default function Register() {
     }
     if (s === 2) {
       if (!yearName.trim()) return 'L\'année scolaire est obligatoire'
+      if (s === 2 && !yearStart) return 'La date de début est obligatoire'
+      if (s === 2 && !yearEnd) return 'La date de fin est obligatoire'
     }
     if (s === 3) {
       if (!firstName.trim()) return 'Le prénom est obligatoire'
@@ -114,11 +116,10 @@ export default function Register() {
         throw new Error(data.error || `Erreur ${res.status}`)
       }
 
-      // Navigate to verification page with email
+      // Navigate to verification page — code is sent by email, never passed in state
       navigate('/verify-email', {
         state: {
           email,
-          verificationCode: data.verificationCode,
         },
       })
     } catch (err) {
@@ -244,11 +245,11 @@ export default function Register() {
                   <input className="input" placeholder="2026-2027" value={yearName} onChange={(e) => setYearName(e.target.value)} />
                 </div>
                 <div>
-                  <label className="label">Début (facultatif)</label>
+                  <label className="label">Début *</label>
                   <input type="date" className="input" value={yearStart} onChange={(e) => setYearStart(e.target.value)} />
                 </div>
                 <div>
-                  <label className="label">Fin (facultatif)</label>
+                  <label className="label">Fin *</label>
                   <input type="date" className="input" value={yearEnd} onChange={(e) => setYearEnd(e.target.value)} />
                 </div>
               </div>
