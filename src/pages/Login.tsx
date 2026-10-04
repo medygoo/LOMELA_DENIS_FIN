@@ -4,24 +4,34 @@ import { useAuth } from '@/hooks/useAuth'
 import { ShieldCheck, Loader2, AlertCircle, MailWarning } from 'lucide-react'
 
 export default function Login() {
-  const { signIn } = useAuth()
+  const { signIn, signInWithPhone } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [loginInput, setLoginInput] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [needsVerification, setNeedsVerification] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  const isPhone = (value: string) => /^[0-9+\s\-().]+$/.test(value) && !value.includes('@')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setNeedsVerification(false)
     setLoading(true)
-    const result = await signIn(email, password)
+
+    const input = loginInput.trim()
+    const phone = isPhone(input)
+    const result = phone
+      ? await signInWithPhone(input, password)
+      : await signIn(input, password)
+
     setLoading(false)
 
     if (result.needsVerification) {
       setNeedsVerification(true)
+    } else if (result.needsPasswordChange) {
+      navigate('/change-password')
     } else if (result.error) {
       setError(result.error)
     } else {
@@ -81,7 +91,7 @@ export default function Login() {
                     Vérifiez votre boîte email : ouvrez l'email de confirmation et cliquez sur le lien, ou saisissez le code à 6 chiffres.
                   </p>
                   <button
-                    onClick={() => navigate('/verify-email', { state: { email } })}
+                    onClick={() => navigate('/verify-email', { state: { email: loginInput } })}
                     className="text-xs text-amber-800 font-medium underline mt-2"
                   >
                     Saisir mon code de vérification
@@ -93,13 +103,13 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label">Email</label>
+              <label className="label">Email ou téléphone</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
                 className="input"
-                placeholder="vous@ecole.edu"
+                placeholder="vous@ecole.edu ou +243 8XX XXX XXX"
                 required
                 autoFocus
               />

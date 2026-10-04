@@ -1,6 +1,6 @@
 import { useSchoolProfiles, useUserRoles } from '@/hooks/useData'
 import { Loader2, UserCog, Plus, X, KeyRound, Edit3, Power, PowerOff, Copy, Check } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useQueryClient } from '@tanstack/react-query'
@@ -12,7 +12,7 @@ export default function StaffPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null)
   const [showRolesModal, setShowRolesModal] = useState<Profile | null>(null)
-  const [tempPasswordInfo, setTempPasswordInfo] = useState<{ email: string; password: string } | null>(null)
+  const [tempPasswordInfo, setTempPasswordInfo] = useState<{ label: string; password: string } | null>(null)
 
   return (
     <div className="space-y-4">
@@ -46,7 +46,7 @@ export default function StaffPage() {
         </div>
       )}
 
-      {showForm && <CreateUserForm onClose={() => setShowForm(false)} onCreated={(email, pw) => setTempPasswordInfo({ email, password: pw })} />}
+      {showForm && <CreateUserForm onClose={() => setShowForm(false)} onCreated={(label, pw) => setTempPasswordInfo({ label, password: pw })} />}
       {editingProfile && <EditProfileForm profile={editingProfile} onClose={() => setEditingProfile(null)} />}
       {showRolesModal && <RolesModal profile={showRolesModal} onClose={() => setShowRolesModal(null)} />}
       {tempPasswordInfo && <TempPasswordModal info={tempPasswordInfo} onClose={() => setTempPasswordInfo(null)} />}
@@ -54,7 +54,7 @@ export default function StaffPage() {
   )
 }
 
-async function handleResetPassword(profile: Profile, setInfo: (info: { email: string; password: string }) => void) {
+async function handleResetPassword(profile: Profile, setInfo: (info: { label: string; password: string }) => void) {
   if (!confirm(`Réinitialiser le mot de passe de ${profile.first_name} ${profile.last_name} ?`)) return
 
   const { data: session } = await supabase.auth.getSession()
@@ -72,7 +72,8 @@ async function handleResetPassword(profile: Profile, setInfo: (info: { email: st
   })
   const data = await res.json()
   if (data.temporaryPassword) {
-    setInfo({ email: data.email, password: data.temporaryPassword })
+    const label = data.email || data.phone || profile.first_name
+    setInfo({ label, password: data.temporaryPassword })
   } else {
     alert(data.error || 'Erreur lors de la réinitialisation')
   }
@@ -81,27 +82,6 @@ async function handleResetPassword(profile: Profile, setInfo: (info: { email: st
 async function handleToggleActive(profile: Profile) {
   const action = profile.is_active ? 'désactiver' : 'réactiver'
   if (!confirm(`Voulez-vous ${action} le compte de ${profile.first_name} ${profile.last_name} ?`)) return
-
-  // If deactivating an admin_principal, check if they're the last one
-  if (profile.is_active) {
-    const { data: roles } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', profile.id)
-      .eq('is_active', true)
-      .eq('role', 'admin_principal')
-
-    if (roles && roles.length > 0) {
-      const { data: result } = await supabase.rpc('check_last_admin_principal', {
-        p_school_id: profile.school_id,
-        p_user_id: profile.id,
-      })
-      if (result === true) {
-        alert('Impossible de désactiver le dernier administrateur principal actif de l\'école.')
-        return
-      }
-    }
-  }
 
   const { error } = await supabase
     .from('profiles')
@@ -113,13 +93,11 @@ async function handleToggleActive(profile: Profile) {
     return
   }
 
-  // Also update staff record
   await supabase
     .from('staff')
     .update({ is_active: !profile.is_active })
     .eq('user_id', profile.id)
 
-  // Audit
   await supabase.rpc('audit_action', {
     p_action: profile.is_active ? 'user_deactivated' : 'user_activated',
     p_entity_type: 'profile',
@@ -127,7 +105,6 @@ async function handleToggleActive(profile: Profile) {
     p_details: { name: `${profile.first_name} ${profile.last_name}` },
   })
 
-  // Invalidate queries to refresh
   window.location.reload()
 }
 
@@ -166,7 +143,7 @@ function ProfileCard({
       </div>
 
       <div className="mt-4 text-xs text-slate-500 space-y-1">
-        <p>{member.email}</p>
+        {member.email && <p>{member.email}</p>}
         {member.phone && <p>{member.phone}</p>}
         {member.function && <p>Fonction: {member.function}</p>}
         {member.matricule && <p>Matricule: {member.matricule}</p>}
@@ -198,7 +175,7 @@ function ProfileCard({
   )
 }
 
-function CreateUserForm({ onClose, onCreated }: { onClose: () => void; onCreated: (email: string, password: string) => void }) {
+function CreateUserForm({ onClose, onCreated }: { onClose: () => void; onCreated: (label: string, password: string) => void }) {
   const { session } = useAuth()
   const qc = useQueryClient()
   const [saving, setSaving] = useState(false)
@@ -229,6 +206,12 @@ function CreateUserForm({ onClose, onCreated }: { onClose: () => void; onCreated
       return
     }
 
+    if (!email && !phone) {
+      setError('Au moins un moyen de connexion est requis (email ou téléphone)')
+      setSaving(false)
+      return
+    }
+
     try {
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`
       const res = await fetch(apiUrl, {
@@ -240,7 +223,7 @@ function CreateUserForm({ onClose, onCreated }: { onClose: () => void; onCreated
         body: JSON.stringify({
           firstName,
           lastName,
-          email,
+          email: email || undefined,
           phone: phone || undefined,
           function: userFunction || undefined,
           matricule: matricule || undefined,
@@ -259,7 +242,8 @@ function CreateUserForm({ onClose, onCreated }: { onClose: () => void; onCreated
 
       qc.invalidateQueries({ queryKey: ['profiles'] })
       qc.invalidateQueries({ queryKey: ['staff'] })
-      onCreated(data.email, data.temporaryPassword)
+      const label = data.email || data.phone || email || phone
+      onCreated(label, data.temporaryPassword)
       setSaving(false)
       onClose()
     } catch {
@@ -288,14 +272,15 @@ function CreateUserForm({ onClose, onCreated }: { onClose: () => void; onCreated
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Email *</label>
-              <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label className="label">Email</label>
+              <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vous@ecole.edu" />
             </div>
             <div>
               <label className="label">Téléphone</label>
-              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+243 8XX XXX XXX" />
             </div>
           </div>
+          <p className="text-xs text-slate-500 -mt-2">Au moins un des deux (email ou téléphone) est obligatoire.</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Fonction</label>
@@ -374,7 +359,6 @@ function EditProfileForm({ profile, onClose }: { profile: Profile; onClose: () =
       return
     }
 
-    // Also update staff record
     await supabase
       .from('staff')
       .update({
@@ -387,7 +371,6 @@ function EditProfileForm({ profile, onClose }: { profile: Profile; onClose: () =
       })
       .eq('user_id', profile.id)
 
-    // Audit
     await supabase.rpc('audit_action', {
       p_action: 'profile_updated',
       p_entity_type: 'profile',
@@ -451,20 +434,18 @@ function EditProfileForm({ profile, onClose }: { profile: Profile; onClose: () =
 }
 
 function RolesModal({ profile, onClose }: { profile: Profile; onClose: () => void }) {
-  const { data: currentRoles } = useUserRoles(profile.id)
+  const { data: currentRoles, isLoading: rolesLoading } = useUserRoles(profile.id)
   const qc = useQueryClient()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(
-    (currentRoles ?? []).filter(r => r.is_active).map(r => r.role)
-  )
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([])
 
-  // Update when data loads
-  useState(() => {
+  // useEffect to sync roles when async data arrives
+  useEffect(() => {
     if (currentRoles) {
       setSelectedRoles(currentRoles.filter(r => r.is_active).map(r => r.role))
     }
-  })
+  }, [currentRoles])
 
   function toggleRole(role: string) {
     setSelectedRoles(prev =>
@@ -476,52 +457,51 @@ function RolesModal({ profile, onClose }: { profile: Profile; onClose: () => voi
     setSaving(true)
     setError(null)
 
-    // Check: removing admin_principal — is this the last one?
-    const wasAdmin = (currentRoles ?? []).some(r => r.role === 'admin_principal' && r.is_active)
-    const willBeAdmin = selectedRoles.includes('admin_principal')
-    if (wasAdmin && !willBeAdmin) {
-      const { data: result } = await supabase.rpc('check_last_admin_principal', {
-        p_school_id: profile.school_id,
-        p_user_id: profile.id,
-      })
-      if (result === true) {
-        setError('Impossible de retirer le dernier administrateur principal actif de l\'école.')
-        setSaving(false)
-        return
-      }
+    if (selectedRoles.length === 0) {
+      setError('Au moins un rôle est obligatoire. Impossible de laisser un compte sans rôle.')
+      setSaving(false)
+      return
     }
 
     // Delete all existing roles for this user in this school
-    await supabase
+    const { error: delError } = await supabase
       .from('user_roles')
       .delete()
       .eq('user_id', profile.id)
       .eq('school_id', profile.school_id)
 
+    if (delError) {
+      setError(delError.message)
+      setSaving(false)
+      return
+    }
+
     // Insert new roles
     for (const role of selectedRoles) {
-      await supabase.from('user_roles').upsert({
+      const { error: insError } = await supabase.from('user_roles').upsert({
         user_id: profile.id,
         school_id: profile.school_id,
         role,
         is_active: true,
       })
+      if (insError) {
+        setError(insError.message)
+        setSaving(false)
+        return
+      }
     }
 
-    // Update primary role in profile (first selected role)
-    if (selectedRoles.length > 0) {
-      await supabase
-        .from('profiles')
-        .update({ role: selectedRoles[0] })
-        .eq('id', profile.id)
+    // Update primary role in profile
+    await supabase
+      .from('profiles')
+      .update({ role: selectedRoles[0] })
+      .eq('id', profile.id)
 
-      await supabase
-        .from('staff')
-        .update({ role: selectedRoles[0] })
-        .eq('user_id', profile.id)
-    }
+    await supabase
+      .from('staff')
+      .update({ role: selectedRoles[0] })
+      .eq('user_id', profile.id)
 
-    // Audit
     await supabase.rpc('audit_action', {
       p_action: 'roles_updated',
       p_entity_type: 'user_roles',
@@ -533,6 +513,16 @@ function RolesModal({ profile, onClose }: { profile: Profile; onClose: () => voi
     qc.invalidateQueries({ queryKey: ['profiles'] })
     setSaving(false)
     onClose()
+  }
+
+  if (rolesLoading) {
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-8 flex justify-center">
+          <Loader2 className="animate-spin text-slate-400" size={24} />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -573,7 +563,7 @@ function RolesModal({ profile, onClose }: { profile: Profile; onClose: () => voi
   )
 }
 
-function TempPasswordModal({ info, onClose }: { info: { email: string; password: string }; onClose: () => void }) {
+function TempPasswordModal({ info, onClose }: { info: { label: string; password: string }; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
 
   function copyPassword() {
@@ -599,8 +589,8 @@ function TempPasswordModal({ info, onClose }: { info: { email: string; password:
             </p>
           </div>
           <div>
-            <label className="label">Email de connexion</label>
-            <p className="text-sm text-slate-900 font-medium">{info.email}</p>
+            <label className="label">Identifiant de connexion</label>
+            <p className="text-sm text-slate-900 font-medium">{info.label}</p>
           </div>
           <div>
             <label className="label">Mot de passe temporaire</label>

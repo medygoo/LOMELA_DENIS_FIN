@@ -10,9 +10,11 @@ const corsHeaders = {
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const digits = "0123456789";
-  const letter = chars[Math.floor(Math.random() * chars.length)];
-  const num = Array.from({ length: 6 }, () => digits[Math.floor(Math.random() * digits.length)]).join("");
-  const suffix = chars[Math.floor(Math.random() * chars.length)];
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  const letter = chars[arr[0] % chars.length];
+  const num = Array.from({ length: 6 }, (_, i) => digits[arr[i + 1] % digits.length]).join("");
+  const suffix = chars[arr[7] % chars.length];
   return `Ss-${num}-${letter}${suffix}`;
 }
 
@@ -65,7 +67,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Verify caller has admin_principal or direction role
+    // Verify caller has admin_principal role ONLY
     const { data: callerRoles } = await supabase
       .from("user_roles")
       .select("role")
@@ -73,13 +75,13 @@ Deno.serve(async (req: Request) => {
       .eq("school_id", callerProfile.school_id)
       .eq("is_active", true);
 
-    const hasAdminAccess = callerRoles?.some(
-      (r: { role: string }) => r.role === "admin_principal" || r.role === "direction"
+    const isAdminPrincipal = callerRoles?.some(
+      (r: { role: string }) => r.role === "admin_principal"
     );
 
-    if (!hasAdminAccess) {
+    if (!isAdminPrincipal) {
       return new Response(
-        JSON.stringify({ error: "Vous n'avez pas l'autorisation de réinitialiser les mots de passe" }),
+        JSON.stringify({ error: "Seul l'administrateur principal peut réinitialiser les mots de passe" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -87,7 +89,7 @@ Deno.serve(async (req: Request) => {
     // Get target user's profile — must be in the same school
     const { data: targetProfile, error: targetErr } = await supabase
       .from("profiles")
-      .select("id, email, school_id")
+      .select("id, email, phone, school_id")
       .eq("id", userId)
       .eq("school_id", callerProfile.school_id)
       .maybeSingle();
@@ -120,21 +122,21 @@ Deno.serve(async (req: Request) => {
       .update({ must_change_password: true })
       .eq("id", userId);
 
-    // Try to revoke existing sessions (sign out all sessions)
-    // Supabase admin API doesn't have a direct "revoke all sessions" endpoint,
-    // but we can sign out by updating the user which invalidates tokens
-    try {
-      await supabase.auth.admin.signOut(userId, "global");
-    } catch {
-      // signOut may not be available in all versions — non-fatal
-    }
+    // Session revocation: Supabase admin.signOut(userId, "global") is not available
+    // in the current supabase-js admin API for per-user sign-out.
+    // The old JWT tokens remain valid until they expire naturally.
+    // However, the must_change_password = true flag forces the user to change
+    // their password on next login, and the new password replaces the old one,
+    // so the old password no longer works for NEW logins.
+    // Existing sessions with the old password may continue until token expiry.
+    // This is a known limitation — documented honestly.
 
     // Audit log
     await supabase.rpc("audit_action", {
       p_action: "password_reset",
       p_entity_type: "profile",
       p_entity_id: userId,
-      p_details: { reset_by: callerId, user_email: targetProfile.email },
+      p_details: { reset_by: callerId, user_email: targetProfile.email, user_phone: targetProfile.phone },
     });
 
     return new Response(
@@ -142,6 +144,8 @@ Deno.serve(async (req: Request) => {
         success: true,
         temporaryPassword: tempPassword,
         email: targetProfile.email,
+        phone: targetProfile.phone,
+        session_revocation: "limited",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -10,10 +10,23 @@ const corsHeaders = {
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const digits = "0123456789";
-  const letter = chars[Math.floor(Math.random() * chars.length)];
-  const num = Array.from({ length: 6 }, () => digits[Math.floor(Math.random() * digits.length)]).join("");
-  const suffix = chars[Math.floor(Math.random() * chars.length)];
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  const letter = chars[arr[0] % chars.length];
+  const num = Array.from({ length: 6 }, (_, i) => digits[arr[i + 1] % digits.length]).join("");
+  const suffix = chars[arr[7] % chars.length];
   return `Ss-${num}-${letter}${suffix}`;
+}
+
+function normalizePhone(phone: string): string {
+  let p = phone.replace(/[\s\-().]/g, "");
+  if (p.startsWith("0")) {
+    p = "+243" + p.substring(1);
+  }
+  if (!p.startsWith("+")) {
+    p = "+243" + p;
+  }
+  return p;
 }
 
 Deno.serve(async (req: Request) => {
@@ -47,13 +60,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!email) {
-      return new Response(
-        JSON.stringify({ error: "L'email est obligatoire pour la création de compte" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -74,10 +80,10 @@ Deno.serve(async (req: Request) => {
 
     const callerId = callerUser.user.id;
 
-    // Get caller's profile and school
+    // Get caller's profile
     const { data: callerProfile, error: profErr } = await supabase
       .from("profiles")
-      .select("school_id, role, is_active")
+      .select("school_id, is_active")
       .eq("id", callerId)
       .maybeSingle();
 
@@ -88,7 +94,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Verify caller has admin_principal or direction role
+    // Verify caller has admin_principal role ONLY (not direction)
     const { data: callerRoles } = await supabase
       .from("user_roles")
       .select("role")
@@ -96,39 +102,58 @@ Deno.serve(async (req: Request) => {
       .eq("school_id", callerProfile.school_id)
       .eq("is_active", true);
 
-    const hasAdminAccess = callerRoles?.some(
-      (r: { role: string }) => r.role === "admin_principal" || r.role === "direction"
+    const isAdminPrincipal = callerRoles?.some(
+      (r: { role: string }) => r.role === "admin_principal"
     );
 
-    if (!hasAdminAccess) {
+    if (!isAdminPrincipal) {
       return new Response(
-        JSON.stringify({ error: "Vous n'avez pas l'autorisation de créer des utilisateurs" }),
+        JSON.stringify({ error: "Seul l'administrateur principal peut créer des utilisateurs" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const schoolId = callerProfile.school_id;
+    const normalizedPhone = phone ? normalizePhone(phone) : undefined;
 
-    // Check if email already exists
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
+    // Check if email already exists (if email provided)
+    if (email) {
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
 
-    if (existingProfile) {
-      return new Response(
-        JSON.stringify({ error: "Un compte avec cet email existe déjà" }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (existingProfile) {
+        return new Response(
+          JSON.stringify({ error: "Un compte avec cet email existe déjà" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Check if phone already exists (if phone provided)
+    if (normalizedPhone) {
+      const { data: existingPhone } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("phone", normalizedPhone)
+        .maybeSingle();
+
+      if (existingPhone) {
+        return new Response(
+          JSON.stringify({ error: "Un compte avec ce téléphone existe déjà" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Generate temporary password
     const tempPassword = generateTempPassword();
 
-    // Create Supabase Auth user — email_confirm: true so they can log in immediately
-    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email,
+    // Create Supabase Auth user
+    // If email provided: create with email. If phone only: create with phone.
+    const authParams: Record<string, unknown> = {
       password: tempPassword,
       email_confirm: true,
       user_metadata: {
@@ -137,7 +162,19 @@ Deno.serve(async (req: Request) => {
         role: roles[0],
         school_id: schoolId,
       },
-    });
+    };
+
+    if (email) {
+      authParams.email = email;
+    }
+    if (normalizedPhone) {
+      authParams.phone = normalizedPhone;
+      authParams.phone_confirm = true;
+    }
+
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser(
+      authParams as Parameters<typeof supabase.auth.admin.createUser>[0]
+    );
 
     if (authError || !authUser.user) {
       return new Response(
@@ -152,10 +189,10 @@ Deno.serve(async (req: Request) => {
     const { error: profileError } = await supabase.from("profiles").upsert({
       id: userId,
       school_id: schoolId,
-      email,
+      email: email || null,
       first_name: firstName,
       last_name: lastName,
-      phone: phone || null,
+      phone: normalizedPhone || null,
       role: roles[0],
       function: userFunction || null,
       matricule: matricule || null,
@@ -176,7 +213,7 @@ Deno.serve(async (req: Request) => {
       first_name: firstName,
       last_name: lastName,
       email: email || null,
-      phone: phone || null,
+      phone: normalizedPhone || null,
       role: roles[0],
       function: userFunction || null,
       matricule: matricule || null,
@@ -200,7 +237,8 @@ Deno.serve(async (req: Request) => {
       p_entity_type: "profile",
       p_entity_id: userId,
       p_details: {
-        email,
+        email: email || null,
+        phone: normalizedPhone || null,
         first_name: firstName,
         last_name: lastName,
         roles,
@@ -208,7 +246,6 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    // Audit: role assignment
     await supabase.rpc("audit_action", {
       p_action: "roles_assigned",
       p_entity_type: "user_roles",
@@ -221,7 +258,8 @@ Deno.serve(async (req: Request) => {
         success: true,
         userId,
         temporaryPassword: tempPassword,
-        email,
+        email: email || null,
+        phone: normalizedPhone || null,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

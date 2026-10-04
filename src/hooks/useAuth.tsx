@@ -3,6 +3,12 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { Profile, School, UserRole } from '@/lib/types'
 
+interface SignInResult {
+  error: string | null
+  needsVerification?: boolean
+  needsPasswordChange?: boolean
+}
+
 interface AuthContextValue {
   session: Session | null
   profile: Profile | null
@@ -11,12 +17,24 @@ interface AuthContextValue {
   loading: boolean
   needsEmailVerification: boolean
   needsPasswordChange: boolean
-  signIn: (email: string, password: string) => Promise<{ error: string | null; needsVerification?: boolean; needsPasswordChange?: boolean }>
+  signIn: (email: string, password: string) => Promise<SignInResult>
+  signInWithPhone: (phone: string, password: string) => Promise<SignInResult>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
+function normalizePhone(phone: string): string {
+  let p = phone.replace(/[\s\-().]/g, '')
+  if (p.startsWith('0')) {
+    p = '+243' + p.substring(1)
+  }
+  if (!p.startsWith('+')) {
+    p = '+243' + p
+  }
+  return p
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -125,19 +143,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function signIn(email: string, password: string) {
-    const { error, data } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
-        return { error: null, needsVerification: true }
-      }
-      return { error: error.message }
-    }
-
+  async function postSignInChecks(data: { user: { id: string; email_confirmed_at?: string | null } }): Promise<SignInResult> {
     const p = await fetchProfileAndSchool(data.user.id)
     if (!p) return { error: 'Profil introuvable. Contactez l\'administrateur de votre école.' }
 
-    // Sync email_verified if Supabase Auth confirmed via link
     if (!p.email_verified && data.user.email_confirmed_at) {
       await supabase.from('profiles').update({ email_verified: true }).eq('id', data.user.id)
       p.email_verified = true
@@ -162,7 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Votre compte est désactivé. Contactez l\'administrateur de votre école.' }
     }
 
-    // Check school status
     if (p.school_id) {
       const { data: sch } = await supabase
         .from('schools')
@@ -179,7 +187,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Check must_change_password
     if (p.must_change_password) {
       setNeedsPasswordChange(true)
       return { error: null, needsPasswordChange: true }
@@ -188,6 +195,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsEmailVerification(false)
     setNeedsPasswordChange(false)
     return { error: null }
+  }
+
+  async function signIn(email: string, password: string): Promise<SignInResult> {
+    const { error, data } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) {
+      if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
+        return { error: null, needsVerification: true }
+      }
+      return { error: error.message }
+    }
+    return postSignInChecks(data)
+  }
+
+  async function signInWithPhone(phone: string, password: string): Promise<SignInResult> {
+    const normalizedPhone = normalizePhone(phone)
+    const { error, data } = await supabase.auth.signInWithPassword({
+      phone: normalizedPhone,
+      password,
+    })
+    if (error) {
+      return { error: error.message }
+    }
+    return postSignInChecks(data)
   }
 
   async function signOut() {
@@ -204,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       session, profile, school, roles, loading,
       needsEmailVerification, needsPasswordChange,
-      signIn, signOut, refreshProfile,
+      signIn, signInWithPhone, signOut, refreshProfile,
     }}>
       {children}
     </AuthContext.Provider>
