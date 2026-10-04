@@ -1,0 +1,2 @@
+[functions.setup-school]
+verify_jwt = false

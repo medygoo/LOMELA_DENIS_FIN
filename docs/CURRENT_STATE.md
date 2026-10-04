@@ -1,6 +1,6 @@
 # SchoolSafe — État courant
 
-**Dernière mise à jour** : 2026-10-04 (session de reprise après perte de code)
+**Dernière mise à jour** : 2026-10-04 (Lot 0 terminé)
 
 ## Ce qui est terminé
 
@@ -12,38 +12,53 @@
 - 2 edge functions déployées (`setup-school`, `create-user`).
 - Données de démonstration : 2 écoles, 2 années scolaires, 2 profils, 1 élève, 1 classe, 1 matière, 1 structure de frais, 1 frais élève, 1 personne autorisée, 2 entrées d'audit.
 
-### Code frontend (0%)
-- **PERDU** — le code source a été réinitialisé. Aucun fichier React/TypeScript ne subsiste.
-- Le projet ne contient que : README.md, package-lock.json (vide), .env, 1 photo dans public/.
+### Code frontend — Lot 0 (100%)
+- Projet Vite + React + TypeScript + Tailwind CSS initialisé.
+- Client Supabase configuré avec variables d'environnement.
+- Types TypeScript pour les 23 tables créés.
+- Système d'authentification complet :
+  - Page de connexion (login) avec branding SchoolSafe et slogan.
+  - Page d'inscription d'école (register) avec edge function `setup-school`.
+  - Hook `useAuth` avec gestion de session et profil.
+  - Protection des routes par authentification.
+- Layout principal avec :
+  - Sidebar avec navigation filtrée par rôle (4 rôles).
+  - Header avec slogan « Chaque enfant protégé, chaque parent informé ».
+  - Logo SchoolSafe officiel (`public/schoolsafe-logo.jpg`).
+  - Menu mobile responsive.
+- Dashboard avec statistiques (élèves, classes, personnel) et accès rapide aux modules.
+- Pages de modules créées :
+  - **Élèves** : liste, recherche, inscription avec modal.
+  - **Classes** : liste, création avec modal.
+  - **Présences** : saisie par classe et date, 4 statuts (présent/absent/retard/excusé).
+  - **Notes & Devoirs** : consultation des notes et devoirs, filtre par élève.
+  - **Finances** : 3 onglets (frais par élève, structures de frais, paiements), résumé financier.
+  - **Sécurité** : entrées/sorties récentes, personnes autorisées.
+  - **Personnel** : liste, ajout avec modal.
+  - **Paramètres** : infos école modifiables, années scolaires.
+- Build TypeScript et Vite validés sans erreur.
 
 ## Ce qui est en cours
 
-### Lot 0 — Reconstruction de l'application
-- **Statut** : à démarrer.
-- **Objectif** : reconstruire l'application React depuis zéro en se basant sur le schéma de base de données existant.
-- **Étapes** :
-  1. Initialiser le projet Vite + React + TypeScript + Tailwind.
-  2. Configurer le client Supabase.
-  3. Créer les types TypeScript depuis le schéma.
-  4. Construire l'authentification (login, inscription école via `setup-school`).
-  5. Construire le layout (sidebar, header, navigation par rôle).
-  6. Construire le Dashboard.
-  7. Construire les pages par module (élèves, classes, présences, notes, finances, sécurité, personnel, paramètres).
+Rien — Lot 0 terminé.
 
 ## Le prochain travail logique
 
-1. **Initialiser le projet** — `npm create vite`, installer dépendances, Tailwind, React Router, TanStack Query.
-2. **Créer `src/lib/supabase.ts`** — client Supabase avec les variables d'environnement.
-3. **Créer `src/lib/types.ts`** — types TypeScript pour les 23 tables.
-4. **Créer le système d'auth** — page de login, page d'enregistrement d'école, hook `useAuth`.
-5. **Créer le layout principal** — sidebar avec navigation par rôle, header avec infos utilisateur.
-6. **Créer le Dashboard** — statistiques générales selon le rôle.
-7. Puis enchaîner les modules par ordre de priorité (voir ROADMAP.md).
+### Lot 1 — Module Élèves (approfondissement)
+- Fiche détaillée par élève (page dédiée avec route /students/:id)
+- Modification d'un élève
+- Liaison élève↔parent (guardians + student_guardians)
+- Génération QR code par élève
+- Upload photo élève
+- Filtrage par classe dans la liste
 
 ## Ce qui ne doit surtout pas être recréé
 
 - **Les tables de base de données** — déjà créées et peuplées.
 - **Les politiques RLS** — déjà appliquées et fonctionnelles.
 - **Les fonctions SQL** — déjà déployées.
-- **Les edge functions** — déjà déployées et actives.
+- **Les edge functions** — déjà déployées et actives (setup-school + create-user).
 - **Les migrations** — déjà appliquées, ne pas réappliquer.
+- **Le projet frontend** — entièrement reconstruit dans le Lot 0.
+- **Le layout et la navigation** — complets avec gestion des rôles.
+- **Les types TypeScript** — les 23 tables sont typées.
