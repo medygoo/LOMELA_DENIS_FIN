@@ -1,7 +1,0 @@
-[functions.create-user]
-verify_jwt = true
-entrypoint = "./functions/create-user/index.ts"
-
-[functions.setup-school]
-verify_jwt = false
-entrypoint = "./functions/setup-school/index.ts"
