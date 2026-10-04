@@ -1,6 +1,6 @@
 # SchoolSafe — État courant
 
-**Dernière mise à jour** : 2026-10-04 (Partie 1 — Correction vérification e-mail)
+**Dernière mise à jour** : 2026-10-04 (Partie 1 — Correction vérification e-mail + Git initialisé)
 
 ## Ce qui est terminé
 
@@ -43,20 +43,39 @@
 - **Compte désactivé** : un profil `is_active = false` ne peut pas se connecter.
 - **École suspendue** : un profil dont l'école est `suspended` ne peut pas se connecter.
 
+### Git
+- Dépôt Git initialisé localement (branche `main`).
+- Commit initial : `407327c` — Partie 1 complète.
+- **Pas de remote GitHub configuré** : l'environnement ne dispose pas de GitHub CLI, de clés SSH, ni de token GitHub.
+- Le push GitHub n'a pas pu être effectué.
+
 ## Tests de sécurité — RÉSULTATS (2026-10-04)
 
 | Test | Description | Résultat |
 |------|-------------|----------|
 | 1 | Code non exposé dans la réponse API | RÉUSSI — `verificationCode` absent de toutes les réponses |
 | 2 | Mauvais code refusé | RÉUSSI — « Code incorrect. 4 tentative(s) restante(s). » |
-| 3 | Code correct validé | RÉUSSI — `verified: true`, `email_verified: true` |
+| 3 | Code correct validé | RÉUSSI — `verified: true`, `email_verified: true`, `email_confirmed_at` set |
 | 4 | Code déjà utilisé refusé | RÉUSSI — `alreadyVerified: true` (compte déjà vérifié) |
 | 5 | Ancien code invalidé après renvoi | RÉUSSI — Anciens codes marqués `invalidated: true` |
 | 6 | Limite de tentatives (5 max) | RÉUSSI — Après 5 tentatives, code invalidé |
 | 7 | Limite de renvois (3 par 24h) | RÉUSSI — « Trop de demandes de renvoi (3 maximum par 24h) » |
 | 8 | Compte non vérifié ne peut pas se connecter | RÉUSSI — Supabase Auth retourne `email_not_confirmed` |
-| 9 | Compte vérifié peut se connecter | RÉUSSI — Login réussi, accès au dashboard |
-| 10 | Isolation des écoles | RÉUSSI — RLS filtre par `school_id`, pas de fuite |
+| 9 | Compte vérifié peut se connecter | RÉUSSI — Token d'accès obtenu, `email_confirmed_at` confirmé |
+| 10 | Reconnexion après vérification | RÉUSSI — Deuxième login réussi |
+| 11 | Isolation des écoles | RÉUSSI — RLS filtre par `school_id`, pas de fuite |
+
+## Test e-mail — Résultat
+
+ENVOI API CONFIRMÉ — RÉCEPTION BOÎTE MAIL NON VÉRIFIABLE
+
+L'edge function `setup-school` appelle `POST /auth/v1/resend` (type: signup) de Supabase Auth, qui déclenche l'envoi d'un email de confirmation à l'adresse du responsable. L'utilisateur Supabase est créé avec `email_confirm: false`, et après validation du code (ou clic sur le lien), `email_confirm` passe à `true` et `email_confirmed_at` est enregistré. La confirmation en base de données est vérifiable. Cependant, la réception physique dans une boîte email n'a pas pu être testée (pas d'accès à une boîte email de test dans cet environnement).
+
+## Test navigateur — Résultat
+
+TEST NAVIGATEUR NON EXÉCUTABLE DANS CET ENVIRONNEMENT
+
+Cet environnement ne dispose pas de navigateur ni d'outil de screenshot. La vérification du parcours visuel a été faite par relecture du code : les pages Login, Register (3 étapes avec stepper), VerifyEmail (OTP responsive), et Setup sont conformes, avec logo, slogan, champs, boutons, messages d'erreur et redirections corrects. Le layout responsive utilise `flex-col lg:flex-row` pour Login, `grid-cols-1 sm:grid-cols-2` pour les formulaires, et les inputs OTP sont `w-10 sm:w-12` pour s'adapter au mobile.
 
 ## Le prochain travail logique
 
