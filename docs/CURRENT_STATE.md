@@ -1,6 +1,21 @@
 # SchoolSafe — État courant
 
-**Dernière mise à jour** : 2026-10-04 (Partie 1 — Correction vérification e-mail + Git initialisé)
+**Dernière mise à jour** : 2026-10-04 (Partie 1 — VALIDÉE)
+
+PARTIE 1 — ENTRÉE DANS SCHOOLSAFE : VALIDÉE
+
+Fonctionnalités validées :
+- Création autonome d'une école
+- Premier administrateur principal
+- Vérification e-mail (envoi API confirmé, code OTP sécurisé, lien de confirmation Supabase)
+- Connexion sécurisée
+- Isolation de l'école (RLS par school_id)
+- Rôles multiples (admin_principal + direction pour un directeur)
+- Statut setup (nouvelle école → page de configuration)
+- Sécurité OTP (expiration 24h, usage unique, invalidation après renvoi, limite 5 tentatives, limite 3 renvois/24h, code jamais exposé en API)
+
+Prochaine partie autorisée après confirmation GitHub :
+PARTIE 2 — Personnel, comptes et rôles de l'école.
 
 ## Ce qui est terminé
 
@@ -45,9 +60,9 @@
 
 ### Git
 - Dépôt Git initialisé localement (branche `main`).
-- Commit initial : `407327c` — Partie 1 complète.
-- **Pas de remote GitHub configuré** : l'environnement ne dispose pas de GitHub CLI, de clés SSH, ni de token GitHub.
-- Le push GitHub n'a pas pu être effectué.
+- Commit initial contenant l'ensemble du projet SchoolSafe.
+- **GitHub non connecté** : la connexion GitHub doit être effectuée via l'interface Bolt (bouton GitHub dans la barre latérale). Cet environnement d'agent ne dispose pas de GitHub CLI, de clés SSH, ni de token d'authentification GitHub. Le push distant n'est pas possible depuis le terminal ici.
+- **Action requise** : connecter votre compte GitHub dans Bolt → créer un nouveau dépôt pour SchoolSafe → Bolt synchronisera automatiquement le code.
 
 ## Tests de sécurité — RÉSULTATS (2026-10-04)
 
