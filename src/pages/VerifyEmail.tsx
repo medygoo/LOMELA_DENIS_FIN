@@ -1,0 +1,226 @@
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { Loader2, AlertCircle, CheckCircle2, MailCheck, RotateCw } from 'lucide-react'
+
+interface LocationState {
+  email?: string
+  verificationCode?: string
+}
+
+export default function VerifyEmail() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { email: initialEmail, verificationCode: devCode } = (location.state ?? {}) as LocationState
+
+  const [email, setEmail] = useState(initialEmail ?? '')
+  const [code, setCode] = useState(['', '', '', '', '', ''])
+  const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [showDevCode, setShowDevCode] = useState(!!devCode)
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([])
+
+  useEffect(() => {
+    if (!initialEmail) {
+      // No email passed — redirect to login
+      navigate('/login', { replace: true })
+    }
+  }, [initialEmail, navigate])
+
+  function handleCodeChange(index: number, value: string) {
+    if (!/^\d?$/.test(value)) return
+    const newCode = [...code]
+    newCode[index] = value
+    setCode(newCode)
+
+    if (value && index < 5) {
+      inputsRef.current[index + 1]?.focus()
+    }
+  }
+
+  function handleKeyDown(index: number, e: React.KeyboardEvent) {
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus()
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (pasted.length === 6) {
+      setCode(pasted.split(''))
+      inputsRef.current[5]?.focus()
+    }
+  }
+
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    const fullCode = code.join('')
+    if (fullCode.length !== 6) {
+      setError('Veuillez saisir les 6 chiffres du code')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/verify-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({ email, code: fullCode }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erreur de vérification')
+      }
+
+      setSuccess(true)
+      // Redirect to login after 2s
+      setTimeout(() => navigate('/login', { replace: true }), 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur de vérification')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleResend() {
+    setError(null)
+    setResending(true)
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/resend-verification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erreur')
+      }
+
+      if (data.verificationCode) {
+        setShowDevCode(true)
+        // Update dev code if returned
+        // The code is in data.verificationCode
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur')
+    } finally {
+      setResending(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 rounded-full bg-success-100 flex items-center justify-center mx-auto mb-6">
+            <CheckCircle2 size={40} className="text-success-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Email vérifié !</h1>
+          <p className="text-slate-500 mb-6">
+            Votre compte est maintenant vérifié. Vous allez être redirigé vers la connexion...
+          </p>
+          <Loader2 size={20} className="animate-spin text-primary-500 mx-auto" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary-100 flex items-center justify-center mx-auto mb-4">
+            <MailCheck size={28} className="text-primary-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Vérifiez votre email</h1>
+          <p className="text-sm text-slate-500">
+            Un code de vérification à 6 chiffres a été envoyé à<br />
+            <span className="font-semibold text-slate-700">{email}</span>
+          </p>
+        </div>
+
+        {showDevCode && devCode && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            <p className="font-medium">Mode développement</p>
+            <p>Votre code de vérification : <span className="font-bold text-lg tracking-wider">{devCode}</span></p>
+            <p className="text-xs mt-1">En production, ce code serait envoyé uniquement par email.</p>
+          </div>
+        )}
+
+        <form onSubmit={handleVerify} className="card p-6 space-y-4">
+          <div>
+            <label className="label text-center">Code de vérification</label>
+            <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+              {code.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={(el) => { inputsRef.current[i] = el }}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleCodeChange(i, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(i, e)}
+                  className="w-12 h-14 text-center text-xl font-bold rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  autoFocus={i === 0}
+                />
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-error-600 bg-error-50 border border-error-200 rounded-lg px-3 py-2">
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
+
+          <button type="submit" disabled={loading} className="btn-primary w-full">
+            {loading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Vérification...
+              </>
+            ) : (
+              'Vérifier mon email'
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center space-y-2">
+          <button
+            onClick={handleResend}
+            disabled={resending}
+            className="text-sm text-primary-600 hover:text-primary-700 font-medium inline-flex items-center gap-1"
+          >
+            {resending ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
+            Renvoyer le code
+          </button>
+          <br />
+          <Link to="/login" className="text-sm text-slate-400 hover:text-slate-600">
+            Retour à la connexion
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}

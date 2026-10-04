@@ -1,15 +1,22 @@
 export type UserRole = 'admin_principal' | 'direction' | 'enseignant' | 'parent_tuteur'
 
+export type SchoolStatus = 'setup' | 'active' | 'suspended'
+
 export interface School {
   id: string
   name: string
   code: string
+  short_name: string | null
   address: string | null
   city: string | null
+  commune: string | null
+  country: string | null
+  levels: string | null
   phone: string | null
   email: string | null
   logo_url: string | null
   is_active: boolean
+  status: SchoolStatus
   created_at: string
   updated_at: string
 }
@@ -32,7 +39,9 @@ export interface Profile {
   last_name: string
   phone: string | null
   role: UserRole
+  function: string | null
   is_active: boolean
+  email_verified: boolean
   created_at: string
   updated_at: string
 }
@@ -297,5 +306,23 @@ export interface AuditLog {
   entity_id: string | null
   details: Record<string, unknown> | null
   ip_address: string | null
+  created_at: string
+}
+
+export interface EmailVerification {
+  id: string
+  user_id: string
+  code: string
+  expires_at: string
+  used: boolean
+  created_at: string
+}
+
+export interface UserRoleEntry {
+  id: string
+  user_id: string
+  school_id: string
+  role: string
+  is_active: boolean
   created_at: string
 }

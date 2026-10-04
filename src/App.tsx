@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from '@/hooks/useAuth'
 import { AppLayout } from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
+import VerifyEmail from '@/pages/VerifyEmail'
+import SetupPage from '@/pages/Setup'
 import Dashboard from '@/pages/Dashboard'
 import StudentsPage from '@/pages/students/StudentsPage'
 import ClassesPage from '@/pages/classes/ClassesPage'
@@ -22,7 +24,7 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoutes() {
-  const { session, loading } = useAuth()
+  const { session, profile, school, loading } = useAuth()
 
   if (loading) {
     return (
@@ -36,10 +38,39 @@ function ProtectedRoutes() {
     return <Navigate to="/login" replace />
   }
 
+  if (!profile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-slate-500 text-sm">
+        Profil introuvable. Contactez l'administrateur de votre école.
+      </div>
+    )
+  }
+
+  // If school is in setup status, redirect to setup page
+  const isSetupRoute = window.location.pathname === '/setup'
+
+  if (school?.status === 'setup' && !isSetupRoute) {
+    return (
+      <AppLayout>
+        <Routes>
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/setup" replace />} />
+        </Routes>
+      </AppLayout>
+    )
+  }
+
+  // If school is active, don't show setup page
+  if (school?.status !== 'setup' && isSetupRoute) {
+    return <Navigate to="/dashboard" replace />
+  }
+
   return (
     <AppLayout>
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/setup" element={<SetupPage />} />
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/classes" element={<ClassesPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
@@ -69,6 +100,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/register" element={session ? <Navigate to="/dashboard" replace /> : <Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   )

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react'
+import { ShieldCheck, Loader2, AlertCircle, MailWarning } from 'lucide-react'
 
 export default function Login() {
   const { signIn } = useAuth()
@@ -9,16 +9,21 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [needsVerification, setNeedsVerification] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setNeedsVerification(false)
     setLoading(true)
-    const { error } = await signIn(email, password)
+    const result = await signIn(email, password)
     setLoading(false)
-    if (error) {
-      setError(error)
+
+    if (result.needsVerification) {
+      setNeedsVerification(true)
+    } else if (result.error) {
+      setError(result.error)
     } else {
       navigate('/dashboard')
     }
@@ -66,6 +71,26 @@ export default function Login() {
             Accédez à votre espace SchoolSafe
           </p>
 
+          {needsVerification && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <MailWarning size={18} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Email non vérifié</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Vous devez vérifier votre email avant de pouvoir vous connecter.
+                  </p>
+                  <button
+                    onClick={() => navigate('/verify-email', { state: { email } })}
+                    className="text-xs text-amber-800 font-medium underline mt-2"
+                  >
+                    Saisir mon code de vérification
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="label">Email</label>
@@ -92,9 +117,9 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-sm text-error-600 bg-error-50 border border-error-200 rounded-lg px-3 py-2">
-                <AlertCircle size={16} />
-                {error}
+              <div className="flex items-start gap-2 text-sm text-error-600 bg-error-50 border border-error-200 rounded-lg px-3 py-2">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -117,7 +142,7 @@ export default function Login() {
           <p className="mt-6 text-center text-sm text-slate-500">
             Nouvelle école ?{' '}
             <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-              Créer un compte
+              Créer mon école
             </Link>
           </p>
         </div>

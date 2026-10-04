@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   X,
+  Rocket,
 } from 'lucide-react'
 import type { UserRole } from '@/lib/types'
 
@@ -28,6 +29,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, roles: ['admin_principal', 'direction', 'enseignant', 'parent_tuteur'] },
+  { to: '/setup', label: 'Configuration', icon: Rocket, roles: ['admin_principal', 'direction'] },
   { to: '/students', label: 'Élèves', icon: Users, roles: ['admin_principal', 'direction', 'enseignant', 'parent_tuteur'] },
   { to: '/classes', label: 'Classes', icon: GraduationCap, roles: ['admin_principal', 'direction', 'enseignant'] },
   { to: '/attendance', label: 'Présences', icon: CalendarCheck, roles: ['admin_principal', 'direction', 'enseignant'] },
@@ -39,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { profile, signOut } = useAuth()
+  const { profile, school, signOut } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -144,6 +146,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <h2 className="text-lg font-semibold text-slate-900">
             {currentItem?.label ?? 'SchoolSafe'}
           </h2>
+          {school && (
+            <span className="hidden md:inline text-sm text-slate-400 ml-2">
+              · {school.name}
+            </span>
+          )}
+          {school?.status === 'setup' && (
+            <span className="badge bg-amber-100 text-amber-700 ml-2">
+              Configuration en cours
+            </span>
+          )}
           <div className="ml-auto hidden sm:block">
             <p className="text-sm text-slate-500 italic">
               « Chaque enfant protégé, chaque parent informé »

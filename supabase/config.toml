@@ -1,2 +1,8 @@
 [functions.setup-school]
 verify_jwt = false
+
+[functions.verify-email]
+verify_jwt = false
+
+[functions.resend-verification]
+verify_jwt = false
