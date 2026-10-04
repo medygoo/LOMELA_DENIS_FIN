@@ -53,3 +53,10 @@ Après un lot terminé :
 6. Indiquer clairement le prochain lot.
 
 Ainsi, une nouvelle session peut reprendre exactement là où la précédente s'est arrêtée, sans dépendre de la mémoire de conversation.
+
+
+## Identité visuelle officielle
+
+- Le logo officiel SchoolSafe à utiliser par Bolt et par l'application est `public/schoolsafe-logo.jpg`.
+- Ne pas recréer, remplacer ou redessiner ce logo sans demande explicite de l'utilisateur.
+- Si un ancien visuel ou une photo générique existe dans `public/`, ce fichier officiel est prioritaire pour l'identité SchoolSafe.

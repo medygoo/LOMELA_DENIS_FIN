@@ -46,3 +46,9 @@ Les décisions ci-dessous sont prioritaires et ne doivent pas être contredites 
 - Pas de DROP TABLE, DROP COLUMN, DELETE de colonnes.
 - Les migrations sont additives uniquement.
 - Les données existantes en base sont précieuses et non récupérables.
+
+
+## D10 — Logo officiel
+- Le logo officiel SchoolSafe est `public/schoolsafe-logo.jpg`.
+- Bolt doit utiliser cet asset pour l'identité visuelle principale de SchoolSafe.
+- Ne pas substituer un autre logo sans décision explicite de l'utilisateur.
