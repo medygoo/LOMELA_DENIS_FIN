@@ -18,9 +18,14 @@ Les décisions ci-dessous sont prioritaires et ne doivent pas être contredites 
 - Une école = un `school_id`. Un utilisateur = un profil = un school_id.
 
 ## D4 — Rôles
-- 4 rôles : `admin_principal`, `direction`, `enseignant`, `parent_tuteur`.
+- 7 rôles : `admin_principal`, `direction`, `enseignant`, `surveillant`, `gardien`, `caisse`, `parent_tuteur`.
+- Un utilisateur peut avoir plusieurs rôles dans la même école (table `user_roles`).
+- Un seul compte Supabase Auth par personne, même avec plusieurs fonctions.
 - Les permissions sont gérées au niveau RLS, pas dans le frontend.
-- Le frontend masque/affiche les sections selon le rôle mais la sécurité est en base.
+- Le frontend masque/affiche les sections selon les rôles mais la sécurité est en base.
+- Protection du dernier admin_principal actif (fonction `check_last_admin_principal`).
+- Les comptes sont créés par l'administrateur (pas d'inscription autonome pour le personnel).
+- Mot de passe temporaire généré automatiquement, changement forcé à la première connexion.
 
 ## D5 — Langue et devise
 - Interface en français.

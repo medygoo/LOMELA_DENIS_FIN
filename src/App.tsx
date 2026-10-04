@@ -5,6 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
 import Register from '@/pages/Register'
 import VerifyEmail from '@/pages/VerifyEmail'
+import ChangePassword from '@/pages/ChangePassword'
 import SetupPage from '@/pages/Setup'
 import Dashboard from '@/pages/Dashboard'
 import StudentsPage from '@/pages/students/StudentsPage'
@@ -24,7 +25,7 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoutes() {
-  const { session, profile, school, loading } = useAuth()
+  const { session, profile, school, loading, needsPasswordChange } = useAuth()
 
   if (loading) {
     return (
@@ -38,6 +39,15 @@ function ProtectedRoutes() {
     return <Navigate to="/login" replace />
   }
 
+  // If user must change password, force them to the change password page
+  if (needsPasswordChange) {
+    const isChangePwdRoute = window.location.pathname === '/change-password'
+    if (!isChangePwdRoute) {
+      return <Navigate to="/change-password" replace />
+    }
+    return <Routes><Route path="/change-password" element={<ChangePassword />} /></Routes>
+  }
+
   if (!profile) {
     return (
       <div className="flex items-center justify-center min-h-screen text-slate-500 text-sm">
@@ -46,10 +56,10 @@ function ProtectedRoutes() {
     )
   }
 
-  // If school is in setup status, redirect to setup page
   const isSetupRoute = window.location.pathname === '/setup'
+  const isChangePwdRoute = window.location.pathname === '/change-password'
 
-  if (school?.status === 'setup' && !isSetupRoute) {
+  if (school?.status === 'setup' && !isSetupRoute && !isChangePwdRoute) {
     return (
       <AppLayout>
         <Routes>
@@ -61,7 +71,6 @@ function ProtectedRoutes() {
     )
   }
 
-  // If school is active, don't show setup page
   if (school?.status !== 'setup' && isSetupRoute) {
     return <Navigate to="/dashboard" replace />
   }
@@ -71,6 +80,7 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/setup" element={<SetupPage />} />
+        <Route path="/change-password" element={<ChangePassword />} />
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/classes" element={<ClassesPage />} />
         <Route path="/attendance" element={<AttendancePage />} />

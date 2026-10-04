@@ -1,7 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { useAuth } from '@/hooks/useAuth'
-import { hasRole } from '@/hooks/useAuth'
+import { useAuth, hasAnyRole } from '@/hooks/useAuth'
 import { ROLE_LABELS, ROLE_COLORS, initials, fullName } from '@/lib/constants'
 import {
   LayoutDashboard,
@@ -28,26 +27,26 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, roles: ['admin_principal', 'direction', 'enseignant', 'parent_tuteur'] },
+  { to: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, roles: ['admin_principal', 'direction', 'enseignant', 'surveillant', 'gardien', 'caisse', 'parent_tuteur'] },
   { to: '/setup', label: 'Configuration', icon: Rocket, roles: ['admin_principal', 'direction'] },
   { to: '/students', label: 'Élèves', icon: Users, roles: ['admin_principal', 'direction', 'enseignant', 'parent_tuteur'] },
   { to: '/classes', label: 'Classes', icon: GraduationCap, roles: ['admin_principal', 'direction', 'enseignant'] },
-  { to: '/attendance', label: 'Présences', icon: CalendarCheck, roles: ['admin_principal', 'direction', 'enseignant'] },
+  { to: '/attendance', label: 'Présences', icon: CalendarCheck, roles: ['admin_principal', 'direction', 'enseignant', 'surveillant'] },
   { to: '/grades', label: 'Notes & Devoirs', icon: ClipboardList, roles: ['admin_principal', 'direction', 'enseignant', 'parent_tuteur'] },
-  { to: '/finance', label: 'Finances', icon: Wallet, roles: ['admin_principal', 'direction'] },
-  { to: '/security', label: 'Sécurité', icon: ShieldCheck, roles: ['admin_principal', 'direction'] },
+  { to: '/finance', label: 'Finances', icon: Wallet, roles: ['admin_principal', 'direction', 'caisse'] },
+  { to: '/security', label: 'Sécurité', icon: ShieldCheck, roles: ['admin_principal', 'direction', 'surveillant', 'gardien'] },
   { to: '/staff', label: 'Personnel', icon: UserCog, roles: ['admin_principal', 'direction'] },
   { to: '/settings', label: 'Paramètres', icon: Settings, roles: ['admin_principal', 'direction'] },
 ]
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { profile, school, signOut } = useAuth()
+  const { profile, school, roles, signOut } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   if (!profile) return null
 
-  const visibleItems = NAV_ITEMS.filter((item) => hasRole(profile, ...item.roles))
+  const visibleItems = NAV_ITEMS.filter((item) => hasAnyRole(roles, ...item.roles))
   const currentItem = NAV_ITEMS.find((item) => location.pathname.startsWith(item.to))
 
   return (

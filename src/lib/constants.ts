@@ -2,6 +2,9 @@ export const ROLE_LABELS: Record<string, string> = {
   admin_principal: 'Administrateur / Directeur',
   direction: 'Direction',
   enseignant: 'Enseignant',
+  surveillant: 'Surveillant',
+  gardien: 'Gardien',
+  caisse: 'Caisse',
   parent_tuteur: 'Parent / Tuteur',
 }
 
@@ -9,8 +12,21 @@ export const ROLE_COLORS: Record<string, string> = {
   admin_principal: 'bg-primary-100 text-primary-700',
   direction: 'bg-accent-100 text-accent-700',
   enseignant: 'bg-amber-100 text-amber-700',
-  parent_tuteur: 'bg-emerald-100 text-emerald-700',
+  surveillant: 'bg-blue-100 text-blue-700',
+  gardien: 'bg-slate-200 text-slate-700',
+  caisse: 'bg-emerald-100 text-emerald-700',
+  parent_tuteur: 'bg-teal-100 text-teal-700',
 }
+
+export const ALL_ROLES: string[] = [
+  'admin_principal',
+  'direction',
+  'enseignant',
+  'surveillant',
+  'gardien',
+  'caisse',
+  'parent_tuteur',
+]
 
 export const FEE_TYPE_LABELS: Record<string, string> = {
   scolarite: 'Scolarité',

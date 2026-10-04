@@ -1,5 +1,45 @@
 # SchoolSafe — Changelog
 
+## 2026-10-04 — Partie 2 : Personnel, comptes et rôles
+
+### Migrations de base de données
+- **008_staff_management_password_reset.sql** :
+  - Ajout colonnes `profiles` : `must_change_password` (boolean, default false), `matricule`, `hire_date`, `photo_url`.
+  - Ajout colonnes `staff` : `matricule`, `photo_url`, `function`.
+  - Nouvelle fonction `audit_action()` (SECURITY DEFINER) — journalisation automatique.
+  - Nouvelle fonction `check_last_admin_principal()` — protection dernier admin.
+  - Nouvelle fonction `get_user_roles()` — récupération des rôles.
+  - RLS mise à jour sur `profiles` (SELECT/INSERT/UPDATE pour admins d'école).
+  - RLS mise à jour sur `user_roles` (SELECT/INSERT/UPDATE/DELETE pour admins d'école).
+- **009_fix_profiles_update_grant.sql** :
+  - GRANT UPDATE sur `profiles` au rôle `authenticated`.
+
+### Edge functions (3 nouvelles)
+- **create-user** (verify_jwt: true) : l'admin crée un utilisateur Supabase Auth + profil + staff + user_roles. Génère un mot de passe temporaire sécurisé (format Ss-XXXXXX-XX). Définit must_change_password = true. Audit log.
+- **reset-user-password** (verify_jwt: true) : l'admin réinitialise le mot de passe. Génère un nouveau temporaire, met must_change_password = true, révoque les sessions. Audit log.
+- **change-password** (verify_jwt: true) : l'utilisateur change son propre mot de passe. Valide les règles (min 8, 1 lettre, 1 chiffre). Met must_change_password = false. Audit log.
+
+### Frontend
+- **StaffPage** (refonte complète) :
+  - Liste de tous les profils de l'école (pas seulement staff).
+  - Carte par personne avec rôles, statut, informations.
+  - Boutons : Modifier, Gérer les rôles, Reset MDP, Activer/Désactiver.
+  - Formulaire de création avec sélection multi-rôles (cases à cocher).
+  - Modal d'affichage du mot de passe temporaire (avec copie).
+  - Modal de gestion des rôles (ajout/retrait).
+  - Protection du dernier admin_principal.
+- **ChangePassword** (nouvelle page) : changement forcé à la première connexion. Min 8 caractères, 1 lettre, 1 chiffre. Redirection vers le dashboard après succès.
+- **useAuth** (refonte) : ajout de `roles` (tableau des rôles), `needsPasswordChange`, `refreshProfile`. Redirection vers /change-password si must_change_password = true.
+- **AppLayout** : navigation filtrée par `hasAnyRole(roles, ...)` au lieu de `hasRole(profile, ...)`. Nouveaux rôles dans les items de navigation.
+- **App.tsx** : route /change-password, redirection forcée si must_change_password.
+- **useData** : nouveaux hooks `useSchoolProfiles()`, `useUserRoles()`. `useStaffList()` ne filtre plus par is_active.
+- **types.ts** : `UserRole` étendu avec 7 rôles. `Profile` : +must_change_password, matricule, hire_date, photo_url. `Staff` : +matricule, photo_url, function.
+- **constants.ts** : ROLE_LABELS, ROLE_COLORS, ALL_ROLES avec 7 rôles.
+- **index.css** : ajout de `btn-secondary-sm`.
+
+### Tests
+- 20 tests API exécutés et tous réussis (voir CURRENT_STATE.md).
+
 ## 2026-10-04 — Partie 1 : Correction vérification e-mail
 
 ### Migration de base de données (007_email_verification_security.sql)

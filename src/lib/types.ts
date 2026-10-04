@@ -1,4 +1,4 @@
-export type UserRole = 'admin_principal' | 'direction' | 'enseignant' | 'parent_tuteur'
+export type UserRole = 'admin_principal' | 'direction' | 'enseignant' | 'surveillant' | 'gardien' | 'caisse' | 'parent_tuteur'
 
 export type SchoolStatus = 'setup' | 'active' | 'suspended'
 
@@ -42,6 +42,10 @@ export interface Profile {
   function: string | null
   is_active: boolean
   email_verified: boolean
+  must_change_password: boolean
+  matricule: string | null
+  hire_date: string | null
+  photo_url: string | null
   created_at: string
   updated_at: string
 }
@@ -57,6 +61,9 @@ export interface Staff {
   role: string
   hire_date: string | null
   is_active: boolean
+  matricule: string | null
+  photo_url: string | null
+  function: string | null
   created_at: string
   updated_at: string
 }

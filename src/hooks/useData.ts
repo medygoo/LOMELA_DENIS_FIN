@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { SchoolYear, ClassRoom, Student, Staff } from '@/lib/types'
+import type { SchoolYear, ClassRoom, Student, Staff, Profile, UserRoleEntry } from '@/lib/types'
 
 export function useCurrentSchoolYear() {
   const { profile } = useAuth()
@@ -97,11 +97,46 @@ export function useStaffList() {
         .from('staff')
         .select('*')
         .eq('school_id', profile.school_id)
-        .eq('is_active', true)
         .order('last_name', { ascending: true })
       if (error) throw error
       return data as Staff[]
     },
     enabled: !!profile?.school_id,
+  })
+}
+
+export function useSchoolProfiles() {
+  const { profile } = useAuth()
+  return useQuery<Profile[]>({
+    queryKey: ['profiles', profile?.school_id],
+    queryFn: async () => {
+      if (!profile?.school_id) return []
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('school_id', profile.school_id)
+        .order('last_name', { ascending: true })
+      if (error) throw error
+      return data as Profile[]
+    },
+    enabled: !!profile?.school_id,
+  })
+}
+
+export function useUserRoles(userId: string | undefined) {
+  const { profile } = useAuth()
+  return useQuery<UserRoleEntry[]>({
+    queryKey: ['user-roles', userId, profile?.school_id],
+    queryFn: async () => {
+      if (!userId || !profile?.school_id) return []
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('school_id', profile.school_id)
+      if (error) throw error
+      return data as UserRoleEntry[]
+    },
+    enabled: !!userId && !!profile?.school_id,
   })
 }

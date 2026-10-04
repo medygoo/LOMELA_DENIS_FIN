@@ -7,10 +7,13 @@ interface AuthContextValue {
   session: Session | null
   profile: Profile | null
   school: School | null
+  roles: string[]
   loading: boolean
   needsEmailVerification: boolean
-  signIn: (email: string, password: string) => Promise<{ error: string | null; needsVerification?: boolean }>
+  needsPasswordChange: boolean
+  signIn: (email: string, password: string) => Promise<{ error: string | null; needsVerification?: boolean; needsPasswordChange?: boolean }>
   signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -19,8 +22,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [school, setSchool] = useState<School | null>(null)
+  const [roles, setRoles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [needsEmailVerification, setNeedsEmailVerification] = useState(false)
+  const [needsPasswordChange, setNeedsPasswordChange] = useState(false)
+
+  async function fetchUserRoles(userId: string, schoolId: string) {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('school_id', schoolId)
+      .eq('is_active', true)
+    if (!error && data) {
+      setRoles(data.map((r: { role: string }) => r.role))
+    } else {
+      setRoles([])
+    }
+  }
 
   async function fetchProfileAndSchool(userId: string) {
     const { data: prof, error: profError } = await supabase
@@ -32,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (profError || !prof) {
       setProfile(null)
       setSchool(null)
+      setRoles([])
       setLoading(false)
       return null
     }
@@ -39,7 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const p = prof as Profile
     setProfile(p)
 
-    // Fetch school
     if (p.school_id) {
       const { data: sch } = await supabase
         .from('schools')
@@ -47,17 +66,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', p.school_id)
         .maybeSingle()
       setSchool(sch as School | null)
+
+      await fetchUserRoles(userId, p.school_id)
     }
 
     setLoading(false)
     return p
   }
 
+  async function refreshProfile() {
+    if (session?.user) {
+      const p = await fetchProfileAndSchool(session.user.id)
+      if (p?.must_change_password) {
+        setNeedsPasswordChange(true)
+      } else {
+        setNeedsPasswordChange(false)
+      }
+    }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session?.user) {
-        fetchProfileAndSchool(session.user.id)
+        (async () => {
+          const p = await fetchProfileAndSchool(session.user.id)
+          if (p?.must_change_password) {
+            setNeedsPasswordChange(true)
+          }
+        })()
       } else {
         setLoading(false)
       }
@@ -69,11 +106,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(sess)
       if (sess?.user) {
         (async () => {
-          await fetchProfileAndSchool(sess.user.id)
+          const p = await fetchProfileAndSchool(sess.user.id)
+          if (p?.must_change_password) {
+            setNeedsPasswordChange(true)
+          } else {
+            setNeedsPasswordChange(false)
+          }
         })()
       } else {
         setProfile(null)
         setSchool(null)
+        setRoles([])
+        setNeedsPasswordChange(false)
         setLoading(false)
       }
     })
@@ -84,18 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     const { error, data } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
-      // Supabase Auth blocks login when email is not confirmed
       if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
         return { error: null, needsVerification: true }
       }
       return { error: error.message }
     }
 
-    // Fetch profile to check email_verified and is_active
     const p = await fetchProfileAndSchool(data.user.id)
     if (!p) return { error: 'Profil introuvable. Contactez l\'administrateur de votre école.' }
 
-    // If Supabase Auth confirmed the email (via link), sync our profile
+    // Sync email_verified if Supabase Auth confirmed via link
     if (!p.email_verified && data.user.email_confirmed_at) {
       await supabase.from('profiles').update({ email_verified: true }).eq('id', data.user.id)
       p.email_verified = true
@@ -107,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null)
       setProfile(null)
       setSchool(null)
+      setRoles([])
       return { error: null, needsVerification: true }
     }
 
@@ -115,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null)
       setProfile(null)
       setSchool(null)
+      setRoles([])
       return { error: 'Votre compte est désactivé. Contactez l\'administrateur de votre école.' }
     }
 
@@ -130,11 +174,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null)
         setProfile(null)
         setSchool(null)
+        setRoles([])
         return { error: 'Votre école est suspendue. Contactez le support.' }
       }
     }
 
+    // Check must_change_password
+    if (p.must_change_password) {
+      setNeedsPasswordChange(true)
+      return { error: null, needsPasswordChange: true }
+    }
+
     setNeedsEmailVerification(false)
+    setNeedsPasswordChange(false)
     return { error: null }
   }
 
@@ -143,11 +195,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
     setSession(null)
     setSchool(null)
+    setRoles([])
     setNeedsEmailVerification(false)
+    setNeedsPasswordChange(false)
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, school, loading, needsEmailVerification, signIn, signOut }}>
+    <AuthContext.Provider value={{
+      session, profile, school, roles, loading,
+      needsEmailVerification, needsPasswordChange,
+      signIn, signOut, refreshProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   )
@@ -162,4 +220,9 @@ export function useAuth() {
 export function hasRole(profile: Profile | null, ...roles: UserRole[]): boolean {
   if (!profile) return false
   return roles.includes(profile.role)
+}
+
+export function hasAnyRole(roles: string[], ...checkRoles: UserRole[]): boolean {
+  if (!roles || roles.length === 0) return false
+  return checkRoles.some(r => roles.includes(r))
 }
